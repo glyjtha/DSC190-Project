@@ -1,4 +1,56 @@
 
-```{r}
-print("hellooooo")
+```{r gwas}
+install.packages("data.table")
+install.packages("R.utils")
+library(data.table)
+library(R.utils)
+file_path <- "/Users/wqy/Downloads/GCST90454344.tsv"
+expression_data <- fread(file_path, sep = "\t", header = TRUE)
+# 
+str(expression_data)
+head(expression_data)
+colnames(expression_data)
+#map the base_pair_location and chromosome to corresponding SNP IDs
+# 
+gene_ids <- expression_data$gene_id
+expression_matrix <- expression_data[, -c(1:4)]
+expression_matrix <- as.matrix(expression_matrix)
+sample_ids <- colnames(expression_matrix)
+# 
+sample_ids <- colnames(expression_matrix)
+print(sample_ids)
+#筛选显著SNPs
+gwas_data[, P := 10^(-neg_log_10_p_value)]
+significant_snps <- gwas_data[P < 5e-8]  # p 值小于 5 × 10⁻⁸
+
+tnbc_snps <- significant_snps[trait == "TNBC"]
+
+fwrite(significant_snps, file = "significant_snps.txt", sep = "\t", quote = FALSE)
+fwrite(tnbc_snps, file = "tnbc_snps.txt", sep = "\t", quote = FALSE)
+
+cat("Total significant SNPs (p < 5e-8):", nrow(significant_snps), "\n")
+cat("Total TNBC-specific SNPs:", nrow(tnbc_snps), "\n")
+
+
 ```
+```{r single cell rna-seq data}
+install.packages(c("ggplot2", "cowplot", "Matrix", "Rcpp"))
+install.packages("Seurat")
+library(Seurat)
+# 加载单细胞 RNA 测序数据
+sc_data <- Read10X(data.dir = "/Users/wqy/Downloads/GSE180878_Li_Brugge_10XscRNAseq_GeneCellMatrix_RNAcounts_human.csv")
+
+# 创建 Seurat 对象
+seurat_obj <- CreateSeuratObject(counts = sc_data, project = "TNBC", min.cells = 3, min.features = 200)
+
+# 质控：过滤低质量细胞
+seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
+
+# 归一化数据
+seurat_obj <- NormalizeData(seurat_obj)
+
+# 标准化变量特征
+seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000)
+
+```
+
