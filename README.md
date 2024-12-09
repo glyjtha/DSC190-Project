@@ -1,4 +1,4 @@
-# DSC 190 Statistical Genomics
+# DSC 190 Statistical Genomics Project
 ## Molecular Mechanisms Based on Breast Cancer Subtypes in TNBC
 By: Qingyu Wang, Juntong Ye
 
