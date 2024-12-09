@@ -109,31 +109,83 @@ if (target_gene %in% eqtl_data$gene_id) {
 
 
 ```{r}
-library(DESeq2)
-library(biomaRt)
-library(VariantAnnotation)
 library(Seurat)
+library(Matrix)
 ```
 
 ```{r}
 rna_counts <- fread("/Users/gloriaye/Desktop/dsc190/final project/GSE180878_Li_Brugge_10XscRNAseq_GeneCellMatrix_RNAcounts_human.csv")
 metadata <- fread("/Users/gloriaye/Desktop/dsc190/final project/GSE180878_Li_Brugge_10XscRNAseq_Metadata_human.csv")
 
-# Convert rna_counts to a matrix (if necessary for Seurat)
-rna_counts_matrix <- as.matrix(rna_counts[, -1, with = FALSE])  # Drop first column if it's gene names
-rownames(rna_counts_matrix) <- rna_counts[[1]]  # Assign first column as rownames
 ```
 
 ```{r}
-install.packages("Matrix")
-library(Matrix)
+
+# Initialize variables
+chunk_size <- 10000  # Number of columns (cells) to process at a time
+num_chunks <- ceiling((ncol(rna_counts) - 1) / chunk_size)  # Exclude the first column
+rna_counts_sparse <- NULL  # Initialize the sparse matrix
+
+# Process data in chunks
+for (i in 1:num_chunks) {
+  start_col <- (i - 1) * chunk_size + 2  # Start from the 2nd column to skip gene names
+  end_col <- min(i * chunk_size + 1, ncol(rna_counts))  # End at the last column in the chunk
+  
+  # Convert the chunk to sparse format directly
+  chunk <- as(as.matrix(rna_counts[, start_col:end_col, with = FALSE]), "dgCMatrix")
+  rownames(chunk) <- rna_counts[[1]]  # Assign rownames from the first column
+  
+  # Combine chunks into the main sparse matrix
+  if (is.null(rna_counts_sparse)) {
+    rna_counts_sparse <- chunk
+  } else {
+    rna_counts_sparse <- cbind(rna_counts_sparse, chunk)
+  }
+  
+  # Track progress
+  print(paste("Processed chunk", i, "of", num_chunks))
+}
+
 ```
 
 ```{r}
-seurat_obj <- CreateSeuratObject(counts = rna_counts_matrix, meta.data = metadata)
+seurat_obj <- CreateSeuratObject(
+  counts = rna_counts_sparse,
+  meta.data = metadata,
+  project = "scRNAseq_Analysis"
+)
+```
+
+```{r}
+# Calculate mitochondrial gene percentage
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+
+# Visualize QC metrics
+VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+# Filter out cells with poor quality
+seurat_obj <- subset(
+  seurat_obj,
+  subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & nCount_RNA < 100000 & percent.mt < 5
+)
+```
+
+```{r}
+VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+
+```{r}
+seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
+
 ```
 ```{r}
+seurat_obj <- FindNeighbors(seurat_obj, features = VariableFeatures(seurat_obj))
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.5)
 
+# Run UMAP directly on the same features
+seurat_obj <- RunUMAP(seurat_obj, features = VariableFeatures(seurat_obj))
+DimPlot(seurat_obj, reduction = "umap", label = TRUE)
 ```
 
 ```{r}
