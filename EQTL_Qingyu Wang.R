@@ -142,3 +142,55 @@ ggplot(significant_eqtl, aes(x = af, y = slope)) +
        x = "Allele Frequency (af)",
        y = "eQTL Effect Size (slope)") +
   theme_minimal()
+
+install.packages("glmnet")  # LASSO/Elastic Net
+install.packages("data.table")  # 数据操作
+install.packages("dplyr")  # 数据处理
+library(data.table)
+library(glmnet)
+library(dplyr)
+gwas_data <- gwas_data %>% filter(!is.na(beta))  # 移除缺失值
+# 载入基因表达数据 (假设是GTEx数据)
+expression_data <- fread("gene_expression_matrix.csv")  # 行是样本，列是基因
+brca2_expr <- expression_data[, "ENSG00000139618", with = FALSE]
+# 提取 eQTL 信息
+eqtl_snps <- target_eqtl$variant_id
+eqtl_beta <- target_eqtl$slope
+
+# 从基因型矩阵中提取 eQTL SNP
+geno_matrix <- fread("genotype_matrix.csv")  # SNP矩阵：行是样本，列是SNP
+geno_eqtl <- geno_matrix[, eqtl_snps, with = FALSE]
+
+# 使用 LASSO 构建预测模型
+lasso_model <- cv.glmnet(as.matrix(geno_eqtl), as.numeric(brca2_expr),
+                         alpha = 1, family = "gaussian")
+
+# 获得预测系数
+coef_lasso <- as.matrix(coef(lasso_model, s = "lambda.min"))
+predicted_expr <- as.matrix(geno_eqtl) %*% coef_lasso[-1]
+# 合并 GWAS 和预测表达数据
+twas_data <- data.frame(
+  SNP = rownames(coef_lasso)[-1],
+  weight = coef_lasso[-1],
+  gwas_beta = gwas_data$beta[match(rownames(coef_lasso)[-1], gwas_data$variant_id)],
+  gwas_pval = gwas_data$pval[match(rownames(coef_lasso)[-1], gwas_data$variant_id)]
+)
+
+# 计算 TWAS Z-score
+twas_data <- twas_data %>%
+  mutate(z_score = weight * gwas_beta / sqrt(weight^2 + gwas_beta^2),
+         twas_pval = 2 * pnorm(-abs(z_score)))
+
+# 筛选显著 TWAS 结果
+significant_twas <- twas_data %>% filter(twas_pval < 0.05)
+library(ggplot2)
+
+# 曼哈顿图展示 BRCA2 TWAS 结果
+ggplot(twas_data, aes(x = SNP, y = -log10(twas_pval))) +
+  geom_point(color = "blue") +
+  geom_hline(yintercept = -log10(0.05), color = "red", linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "TWAS Results for BRCA2",
+       x = "SNP",
+       y = "-log10(TWAS p-value)")
+#####
