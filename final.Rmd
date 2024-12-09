@@ -89,7 +89,7 @@ head(eqtl_data)
 
 ```{r}
 # 筛选目标基因
-target_gene <- "ENSG00000121879"
+target_gene <- "ENSG00000227232"
 
 # 检查目标基因是否存在于 gene_id 列中
 if (target_gene %in% eqtl_data$gene_id) {
@@ -112,80 +112,31 @@ if (target_gene %in% eqtl_data$gene_id) {
 library(DESeq2)
 library(biomaRt)
 library(VariantAnnotation)
+library(Seurat)
 ```
 
 ```{r}
 rna_counts <- fread("/Users/gloriaye/Desktop/dsc190/final project/GSE180878_Li_Brugge_10XscRNAseq_GeneCellMatrix_RNAcounts_human.csv")
 metadata <- fread("/Users/gloriaye/Desktop/dsc190/final project/GSE180878_Li_Brugge_10XscRNAseq_Metadata_human.csv")
 
-# View data structure
-print("RNA counts dimensions:")
-dim(rna_counts)
-print("\nMetadata dimensions:")
-dim(metadata)
-```
-```{r}
-# View first few rows
-print("\nFirst few rows of RNA counts:")
-head(rna_counts[, 1:5])  # Show first 5 columns only
-print("\nFirst few rows of metadata:")
-head(metadata)
-
+# Convert rna_counts to a matrix (if necessary for Seurat)
+rna_counts_matrix <- as.matrix(rna_counts[, -1, with = FALSE])  # Drop first column if it's gene names
+rownames(rna_counts_matrix) <- rna_counts[[1]]  # Assign first column as rownames
 ```
 
 ```{r}
-major_subtype_counts <- table(metadata$Major.subtype)
-print("Cells per major subtype:")
-print(major_subtype_counts)
-
-# Cell subtypes summary
-cell_subtype_counts <- table(metadata$Cell.subtype)
-print("\nCells per subtype:")
-print(cell_subtype_counts)
+install.packages("Matrix")
+library(Matrix)
 ```
 
 ```{r}
-# Create index if needed
-if (!file.exists(tbi_path)) {
-    system(paste("tabix -p vcf", vcf_path))
-}
-
-# Try reading with alternative method
-library(Rsamtools)
-
-# Try to view the first few lines of the VCF
-system(paste("zcat", vcf_path, "| head -n 20"))
+seurat_obj <- CreateSeuratObject(counts = rna_counts_matrix, meta.data = metadata)
+```
+```{r}
 
 ```
 
 ```{r}
-snp_ranges <- GRanges(
-    seqnames = significant_snps$CHROM,
-    ranges = IRanges(start = significant_snps$POS, end = significant_snps$POS),
-    rsid = significant_snps$rsID
-)
-```
-
-```{r}
-vcf_data <- readVcf(vcf, "hg19", param=snp_ranges)
-
-# Create comprehensive SNP info
-snp_info <- data.frame(
-    rsID = names(vcf_data),
-    CHROM = seqnames(rowRanges(vcf_data)),
-    POS = start(rowRanges(vcf_data)),
-    REF = ref(vcf_data),
-    ALT = unlist(alt(vcf_data))
-)
-```
-
-
-```{r single cell rna-seq data}
-install.packages(c("ggplot2", "cowplot", "Matrix", "Rcpp"))
-install.packages("Seurat")
-library(Seurat)
-# 加载单细胞 RNA 测序数据
-sc_data <- Read10X(data.dir = "/Users/wqy/Downloads/GSE180878_Li_Brugge_10XscRNAseq_GeneCellMatrix_RNAcounts_human.csv")
 
 ```
 
