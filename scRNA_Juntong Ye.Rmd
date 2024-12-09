@@ -1,0 +1,191 @@
+
+```{r gwas}
+file_path <- "/Users/gloriaye/Desktop/dsc190/final project/GCST90454344.tsv"
+gwas_data <- fread(file_path, sep = "\t", header = TRUE)
+# 查看数据
+str(gwas_data)
+head(gwas_data)
+colnames(gwas_data)
+#尝试1kg
+library(dplyr) 
+library(readr)   
+bim_dir <- "/Users/gloriaye/Desktop/dsc190/13963974"
+colnames(gwas_data)[colnames(gwas_data) == "chromosome"] <- "CHROM"
+colnames(gwas_data)[colnames(gwas_data) == "base_pair_location"] <- "POS"
+#尝试1kg
+bim_data <- data.frame()
+for (chr in 1:22) {
+  bim_file <- file.path(bim_dir, paste0("1000G_eur_chr", chr, ".bim"))
+  if (file.exists(bim_file)) {
+    # 读取 .bim 文件
+    bim_chr <- read_table2(bim_file, col_names = c("CHROM", "rsID", "cm", "POS", "REF", "ALT"))
+    bim_data <- bind_rows(bim_data, bim_chr)
+  }
+}
+head(bim_data)
+# match
+annotated_gwas <- gwas_data %>%
+  inner_join(bim_data, by = c("CHROM", "POS"))
+head(annotated_gwas)
+#write_tsv(annotated_gwas, "/Users/gloriaye/Desktop/dsc190/final project")
+#尝试1kg
+```
+
+```{r}
+library(data.table)
+library(dplyr) 
+library(readr)
+```
+
+```{r}
+annotated_gwas = fread('/Users/gloriaye/Desktop/dsc190/final project/annotated_gwas_data.tsv')
+```
+
+
+```{r gwas}
+significance_threshold <- 7.3  # 对应 p-value < 5e-8
+significant_snps <- annotated_gwas %>%
+  filter(neg_log_10_p_value >= significance_threshold)
+print(dim(significant_snps))  # 显示显著 SNP 的数量
+print(head(significant_snps)) 
+# rsID
+significant_snp_ids <- significant_snps$SNP
+write.table(significant_snp_ids, "significant_snps.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
+#图
+library(ggplot2)
+# 显著 SNP 分布图
+significant_snps <- annotated_gwas[annotated_gwas$`neg_log_10_p_value` > 7.301, ]
+ggplot(significant_snps, aes(x = CHROM, y = -log10(10^(-neg_log_10_p_value)))) +
+  geom_point(alpha = 0.6) +
+  labs(title = "Significant SNP Distribution",
+       x = "Chromosome",
+       y = "-log10(P-value)") +
+  theme_minimal()
+#图
+
+#rna-seq
+
+```
+
+```{r eQTL}
+# 加载必要包
+library(data.table)
+library(plink2R)
+library(Rcpp)
+library(RcppEigen)
+library(arrow)
+```
+
+
+```{r eQTL}
+eqtl_data <- read_parquet("/Users/gloriaye/Desktop/dsc190/final project/Breast_Mammary_Tissue.v10.eQTLs.signif_pairs.parquet")
+
+```
+
+```{r}
+head(eqtl_data)
+```
+
+
+```{r}
+# 筛选目标基因
+target_gene <- "ENSG00000227232"
+
+# 检查目标基因是否存在于 gene_id 列中
+if (target_gene %in% eqtl_data$gene_id) {
+  # 如果目标基因存在，筛选对应的行
+  target_eqtl <- eqtl_data[gene_id %in% target_gene]
+  
+  # 检查目标基因的 eQTL 数量
+  print(paste("目标基因相关的 eQTL 数量:", nrow(target_eqtl)))
+  
+  # 查看结果
+  print(target_eqtl)
+} else {
+  # 如果目标基因不存在
+  print("目标基因在 gene_id 列中不存在。")
+}
+```
+
+
+```{r}
+library(Seurat)
+library(Matrix)
+```
+
+```{r}
+rna_counts <- fread("/Users/gloriaye/Desktop/dsc190/final project/GSE180878_Li_Brugge_10XscRNAseq_GeneCellMatrix_RNAcounts_human.csv")
+metadata <- fread("/Users/gloriaye/Desktop/dsc190/final project/GSE180878_Li_Brugge_10XscRNAseq_Metadata_human.csv")
+
+```
+
+```{r}
+
+# Initialize variables
+chunk_size <- 10000  # Number of columns (cells) to process at a time
+num_chunks <- ceiling((ncol(rna_counts) - 1) / chunk_size)  # Exclude the first column
+rna_counts_sparse <- NULL  # Initialize the sparse matrix
+
+# Process data in chunks
+for (i in 1:num_chunks) {
+  start_col <- (i - 1) * chunk_size + 2  # Start from the 2nd column to skip gene names
+  end_col <- min(i * chunk_size + 1, ncol(rna_counts))  # End at the last column in the chunk
+  
+  # Convert the chunk to sparse format directly
+  chunk <- as(as.matrix(rna_counts[, start_col:end_col, with = FALSE]), "dgCMatrix")
+  rownames(chunk) <- rna_counts[[1]]  # Assign rownames from the first column
+  
+  # Combine chunks into the main sparse matrix
+  if (is.null(rna_counts_sparse)) {
+    rna_counts_sparse <- chunk
+  } else {
+    rna_counts_sparse <- cbind(rna_counts_sparse, chunk)
+  }
+  
+  # Track progress
+  print(paste("Processed chunk", i, "of", num_chunks))
+}
+
+```
+
+```{r}
+seurat_obj <- CreateSeuratObject(
+  counts = rna_counts_sparse,
+  meta.data = metadata,
+  project = "scRNAseq_Analysis"
+)
+```
+
+```{r}
+# Calculate mitochondrial gene percentage
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
+
+# Visualize QC metrics
+VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+# Filter out cells with poor quality
+seurat_obj <- subset(
+  seurat_obj,
+  subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & nCount_RNA < 100000 & percent.mt < 5
+)
+```
+
+```{r}
+VlnPlot(seurat_obj, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+
+```{r}
+seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", scale.factor = 10000)
+
+```
+
+```{r}
+seurat_obj <- FindNeighbors(seurat_obj, features = VariableFeatures(seurat_obj))
+seurat_obj <- FindClusters(seurat_obj, resolution = 0.5)
+
+# Run UMAP directly on the same features
+seurat_obj <- RunUMAP(seurat_obj, features = VariableFeatures(seurat_obj))
+DimPlot(seurat_obj, reduction = "umap", label = TRUE)
+```
+
