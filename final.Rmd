@@ -1,15 +1,6 @@
 
-```{r gwas and signif_snps}
-install.packages("data.table")
-<<<<<<< HEAD
-library(data.table)
+```{r gwas}
 file_path <- "/Users/gloriaye/Desktop/dsc190/final project/GCST90454344.tsv"
-=======
-#install.packages("R.utils")
-library(data.table)
-#library(R.utils)
-file_path <- "/Users/wqy/Downloads/GCST90454344.tsv"
->>>>>>> origin/main
 gwas_data <- fread(file_path, sep = "\t", header = TRUE)
 # 查看数据
 str(gwas_data)
@@ -17,13 +8,8 @@ head(gwas_data)
 colnames(gwas_data)
 #尝试1kg
 library(dplyr) 
-install.packages("readr")
 library(readr)   
-<<<<<<< HEAD
 bim_dir <- "/Users/gloriaye/Desktop/dsc190/13963974"
-=======
-bim_dir <- "/Users/wqy/Downloads/1KG"
->>>>>>> origin/main
 colnames(gwas_data)[colnames(gwas_data) == "chromosome"] <- "CHROM"
 colnames(gwas_data)[colnames(gwas_data) == "base_pair_location"] <- "POS"
 #尝试1kg
@@ -41,9 +27,18 @@ head(bim_data)
 annotated_gwas <- gwas_data %>%
   inner_join(bim_data, by = c("CHROM", "POS"))
 head(annotated_gwas)
-<<<<<<< HEAD
 #write_tsv(annotated_gwas, "/Users/gloriaye/Desktop/dsc190/final project")
 #尝试1kg
+```
+
+```{r}
+library(data.table)
+library(dplyr) 
+library(readr)
+```
+
+```{r}
+annotated_gwas = fread('/Users/gloriaye/Desktop/dsc190/final project/annotated_gwas_data.tsv')
 ```
 
 
@@ -69,43 +64,51 @@ ggplot(significant_snps, aes(x = CHROM, y = -log10(10^(-neg_log_10_p_value)))) +
 #图
 
 #rna-seq
-=======
-write_tsv(annotated_gwas, "/Users/wqy/Downloads/annotated_gwas_data.tsv")
-#尝试1kg
-
-significance_threshold <- 7.3  # 对应 p-value < 5e-8
-significant_snps <- annotated_gwas %>%
-  filter(neg_log_10_p_value >= significance_threshold)
-print(dim(significant_snps))  # 显示显著 SNP 的数量
-print(head(significant_snps)) 
-# rsID
-significant_snp_ids <- significant_snps$SNP
-write.table(significant_snp_ids, "significant_snps.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
-#图
-library(ggplot2)
-# 显著 SNP 分布图
-significant_snps <- annotated_gwas[annotated_gwas$`neg_log_10_p_value` > 7.301, ]
-ggplot(significant_snps, aes(x = CHROM, y = -log10(10^(-neg_log_10_p_value)))) +
-  geom_point(alpha = 0.6) +
-  labs(title = "Significant SNP Distribution",
-       x = "Chromosome",
-       y = "-log10(P-value)") +
-  theme_minimal()
-#图
-
->>>>>>> origin/main
-
-#rna-seq
 
 ```
-<<<<<<< HEAD
+
+```{r eQTL}
+# 加载必要包
+library(data.table)
+library(plink2R)
+library(Rcpp)
+library(RcppEigen)
+library(arrow)
+```
+
+
+```{r eQTL}
+eqtl_data <- read_parquet("/Users/gloriaye/Desktop/dsc190/final project/Breast_Mammary_Tissue.v10.eQTLs.signif_pairs.parquet")
+
+```
 
 ```{r}
-# Install required packages
-if (!require("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
-BiocManager::install(c("DESeq2", "biomaRt", "VariantAnnotation"))
+head(eqtl_data)
+```
 
+
+```{r}
+# 筛选目标基因
+target_gene <- "ENSG00000121879"
+
+# 检查目标基因是否存在于 gene_id 列中
+if (target_gene %in% eqtl_data$gene_id) {
+  # 如果目标基因存在，筛选对应的行
+  target_eqtl <- eqtl_data[gene_id %in% target_gene]
+  
+  # 检查目标基因的 eQTL 数量
+  print(paste("目标基因相关的 eQTL 数量:", nrow(target_eqtl)))
+  
+  # 查看结果
+  print(target_eqtl)
+} else {
+  # 如果目标基因不存在
+  print("目标基因在 gene_id 列中不存在。")
+}
+```
+
+
+```{r}
 library(DESeq2)
 library(biomaRt)
 library(VariantAnnotation)
@@ -183,10 +186,6 @@ install.packages("Seurat")
 library(Seurat)
 # 加载单细胞 RNA 测序数据
 sc_data <- Read10X(data.dir = "/Users/wqy/Downloads/GSE180878_Li_Brugge_10XscRNAseq_GeneCellMatrix_RNAcounts_human.csv")
-=======
-```{r twas}
->>>>>>> origin/main
-
 
 ```
 
